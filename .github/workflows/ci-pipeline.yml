@@ -1,0 +1,27 @@
+# Pipeline de Integración Continua - TP4 Gisella Henriquez (Legajo 5225)
+name: CI - Validación de configuración
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validar-configuracion:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Instalar dependencias
+        run: pip install pyyaml
+
+      - name: Ejecutar las pruebas de configuración
+        run: python -m unittest tests/test_config.py -v
