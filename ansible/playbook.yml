@@ -1,0 +1,72 @@
+---
+# Playbook de aprovisionamiento - TP4 Gisella Henriquez (Legajo 5225)
+# Instala Docker, copia la configuración y levanta Nginx + GoAccess.
+- name: Aprovisionar servidor de análisis de logs (Nginx + GoAccess)
+  hosts: lab_systems
+  become: yes
+
+  vars:
+    dir_proyecto: /opt/tp4          # Carpeta destino en el servidor
+    dir_origen: "{{ playbook_dir }}/../docker"   # Archivos del repositorio
+
+  tasks:
+    - name: Instalar Docker y sus dependencias
+      ansible.builtin.apt:
+        name:
+          - docker.io               # Motor de Docker
+          - docker-compose-v2       # Plugin "docker compose"
+          - python3-yaml
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600      # No actualizar la caché si tiene menos de 1 hora
+
+    - name: Asegurar que el servicio Docker esté iniciado y habilitado
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Agregar al usuario al grupo docker (usar docker sin sudo)
+      ansible.builtin.user:
+        name: "{{ usuario_lab }}"
+        groups: docker
+        append: yes
+
+    - name: Crear la carpeta del proyecto en el servidor
+      ansible.builtin.file:
+        path: "{{ dir_proyecto }}/docker"
+        state: directory
+        mode: "0755"
+
+    - name: Copiar Dockerfile, docker-compose.yml y configuración de GoAccess
+      ansible.builtin.copy:
+        src: "{{ dir_origen }}/{{ item }}"
+        dest: "{{ dir_proyecto }}/docker/{{ item }}"
+        mode: "0644"
+      loop:
+        - Dockerfile
+        - docker-compose.yml
+        - goaccess.conf
+
+    - name: Copiar la configuración de Nginx
+      ansible.builtin.copy:
+        src: "{{ dir_origen }}/nginx.conf"
+        dest: "{{ dir_proyecto }}/docker/nginx.conf"
+        mode: "0644"
+      notify: Reiniciar Nginx       # Dispara el handler solo si el archivo cambió
+
+    - name: Levantar los contenedores con Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir_proyecto }}/docker"
+        project_name: tp4
+        state: present
+        build: policy               # Construye la imagen de GoAccess solo si no existe
+
+  handlers:
+    - name: Reiniciar Nginx
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir_proyecto }}/docker"
+        project_name: tp4
+        services:
+          - web_server
+        state: restarted
